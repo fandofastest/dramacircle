@@ -11,10 +11,7 @@ import {
 } from "../utils/normalize";
 import { ExternalDramaService } from "./externalDrama.service";
 
-const STREAM_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const COMMENT_COOLDOWN_MS = 8000;
-const streamCache = new Map<string, { payload: Record<string, unknown>; expiresAt: number }>();
-const streamInFlight = new Map<string, Promise<Record<string, unknown>>>();
 
 export class DramaService {
   constructor(
@@ -98,8 +95,14 @@ export class DramaService {
       return existing;
     }
 
-    const payload = await this.externalService.fetchRandomDrama();
+    const payload = await this.externalService.fetchForYou(1);
     const normalized = this.normalizeDramaCollection(payload);
+    if (normalized.length === 0) {
+      const latest = await this.externalService.fetchLatest();
+      const latestNormalized = this.normalizeDramaCollection(latest);
+      await this.repository.saveRandomDrama(latestNormalized);
+      return (await this.repository.getRandomDrama()) ?? [];
+    }
     await this.repository.saveRandomDrama(normalized);
     return (await this.repository.getRandomDrama()) ?? [];
   }
@@ -110,7 +113,7 @@ export class DramaService {
       return existing;
     }
 
-    const payload = await this.externalService.fetchPopulerSearch();
+    const payload = await this.externalService.fetchDubindo("terpopuler");
     const normalized = this.normalizeDramaCollection(payload);
     await this.repository.savePopulerSearch(normalized);
     return (await this.repository.getPopulerSearch()) ?? [];
@@ -172,44 +175,50 @@ export class DramaService {
     return { bookId, episodes: (await this.repository.getEpisodesByBookId(bookId)) ?? [] };
   }
 
+  async getAllEpisodeRaw(bookId: string): Promise<{
+    bookId: string;
+    items: Array<{
+      chapterId: string;
+      chapterIndex: number;
+      isCharge: boolean;
+      videoUrl: string;
+      videoUrl1080: string | null;
+    }>;
+  }> {
+    const payload = await this.externalService.fetchAllEpisodeRaw(bookId);
+    const items = extractArrayPayload(payload).map((item) => {
+      const chapterIdRaw = item.chapterId ?? item.id ?? item.episodeId;
+      const chapterIndexRaw = item.chapterIndex ?? item.episodeNumber ?? item.index ?? 0;
+      const chapterId = String(chapterIdRaw ?? "");
+      const chapterIndex =
+        typeof chapterIndexRaw === "number"
+          ? chapterIndexRaw
+          : Number.parseInt(String(chapterIndexRaw ?? 0), 10) || 0;
+      const isCharge = item.isCharge === true || item.isCharge === 1 || item.isCharge === "1";
+      const videoUrl = String(item.videoUrl ?? item.url ?? item.playUrl ?? "");
+      const videoUrl1080Raw = item["1080p"] ?? item.video1080 ?? item.fullHdUrl;
+      const videoUrl1080String = String(videoUrl1080Raw ?? "").trim();
+      return {
+        chapterId,
+        chapterIndex,
+        isCharge,
+        videoUrl,
+        videoUrl1080: videoUrl1080String.length > 0 ? videoUrl1080String : null
+      };
+    });
+
+    return {
+      bookId,
+      items: items.filter((item) => item.chapterId.length > 0 && item.videoUrl.length > 0)
+    };
+  }
+
   async stream(url: string): Promise<Record<string, unknown>> {
     const key = url.trim();
     if (!key) {
       throw new ApiError(400, "Invalid stream URL");
     }
-
-    const now = Date.now();
-    const existing = streamCache.get(key);
-    if (existing && existing.expiresAt > now) {
-      return existing.payload;
-    }
-
-    const inFlight = streamInFlight.get(key);
-    if (inFlight) {
-      return inFlight;
-    }
-
-    const task = (async () => {
-      const payload = await this.externalService.decryptStream(key);
-      const objectPayload = extractObjectPayload(payload);
-      if (!objectPayload) {
-        throw new ApiError(502, "Invalid stream payload from external API");
-      }
-      streamCache.set(key, { payload: objectPayload, expiresAt: Date.now() + STREAM_CACHE_TTL_MS });
-      return objectPayload;
-    })();
-
-    streamInFlight.set(key, task);
-    try {
-      return await task;
-    } catch (error) {
-      if (existing) {
-        return existing.payload;
-      }
-      throw error;
-    } finally {
-      streamInFlight.delete(key);
-    }
+    return { url: key };
   }
 
   getUpstreamDiagnostics(): Record<string, unknown> {

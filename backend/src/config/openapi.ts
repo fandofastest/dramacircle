@@ -159,6 +159,23 @@ export const openApiDocument = {
         }
       }
     },
+    "/api/drama/allepisode/{bookId}": {
+      get: {
+        tags: ["Drama"],
+        summary: "Get raw upstream episode list by bookId",
+        parameters: [
+          {
+            name: "bookId",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        responses: {
+          "200": { description: "Raw all-episode data returned" }
+        }
+      }
+    },
     "/api/drama/stream": {
       get: {
         tags: ["Drama"],

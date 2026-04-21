@@ -59,6 +59,12 @@ export class DramaController {
     res.status(200).json({ success: true, data });
   };
 
+  getAllEpisodeRaw = async (req: Request, res: Response): Promise<void> => {
+    const bookId = String(req.params.bookId);
+    const data = await this.dramaService.getAllEpisodeRaw(bookId);
+    res.status(200).json({ success: true, data });
+  };
+
   stream = async (req: Request, res: Response): Promise<void> => {
     const url = String(req.query.url ?? "");
     const data = await this.dramaService.stream(url);

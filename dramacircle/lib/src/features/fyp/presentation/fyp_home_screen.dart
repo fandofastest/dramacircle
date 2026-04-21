@@ -1,7 +1,5 @@
 import 'package:dramacircle/src/core/providers.dart';
-import 'package:dramacircle/src/features/auth/presentation/login_screen.dart';
 import 'package:dramacircle/src/features/auth/providers/auth_controller.dart';
-import 'package:dramacircle/src/features/auth/providers/guest_access_controller.dart';
 import 'package:dramacircle/src/features/detail/presentation/detail_screen.dart';
 import 'package:dramacircle/src/features/fyp/providers/fyp_controller.dart';
 import 'package:dramacircle/src/features/fyp/presentation/fyp_video_page.dart';
@@ -24,7 +22,6 @@ class _FypHomeScreenState extends ConsumerState<FypHomeScreen> {
   Widget build(BuildContext context) {
     final fypState = ref.watch(fypControllerProvider);
     final user = ref.watch(authControllerProvider).valueOrNull;
-    final guestAccess = ref.watch(guestAccessProvider);
 
     if (fypState.loading && fypState.items.isEmpty) {
       return Shimmer.fromColors(
@@ -71,24 +68,17 @@ class _FypHomeScreenState extends ConsumerState<FypHomeScreen> {
         final episode = fypState.items[index];
         final store = ref.read(localStoreProvider);
         final premiumLocked = episode.isPremium && !(user?.isPremium ?? false);
-        final guestLocked = user == null && guestAccess.used && guestAccess.unlockedEpisodeId != episode.episodeId;
-        final isLocked = premiumLocked || guestLocked;
+        final isLocked = premiumLocked;
         return FypVideoPage(
           episode: episode,
           userPremium: user?.isPremium ?? false,
           isLocked: isLocked,
-          lockTitle: guestLocked ? 'Login untuk lanjut nonton 🔐' : 'Unlock this episode 🔒',
-          lockButtonText: guestLocked ? 'Login' : 'Go Premium',
+          lockTitle: 'Unlock this episode 🔒',
+          lockButtonText: 'Go Premium',
           onGoPremium: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => guestLocked ? const LoginScreen() : const PremiumScreen()),
-            );
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumScreen()));
           },
-          onPlaybackStarted: () {
-            if (user == null && !guestAccess.used) {
-              ref.read(guestAccessProvider.notifier).consumeIfNeeded(episode.episodeId);
-            }
-          },
+          onPlaybackStarted: () {},
           onSaveProgress: (positionMs) async {
             await store.pushHistory(episode.episodeId);
             await store.setEpisodePositionMs(episodeId: episode.episodeId, positionMs: positionMs);

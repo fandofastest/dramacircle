@@ -46,7 +46,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const Icon(Icons.movie_filter_rounded, size: 56),
                   const SizedBox(height: 16),
                   Text(
-                    _isRegisterMode ? 'Create your account' : 'Welcome to DramaCircle',
+                    _isRegisterMode ? 'Create your account' : 'Welcome to KissAsian',
                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 24),

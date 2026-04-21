@@ -1,4 +1,4 @@
-package com.example.dramacircle
+package com.kissasian.app
 
 import io.flutter.embedding.android.FlutterActivity
 

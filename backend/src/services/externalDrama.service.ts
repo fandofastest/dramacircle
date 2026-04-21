@@ -1,53 +1,58 @@
 import axios from "axios";
+import { env } from "../config/env";
 import { externalApiClient } from "../config/externalApiClient";
 import { ApiError } from "../utils/apiError";
 import { logger } from "../utils/logger";
 
 export class ExternalDramaService {
   private readonly diagnostics = new Map<string, { total: number; errors: number; rateLimited: number; lastStatus?: number }>();
+  private readonly defaultLang = env.EXTERNAL_API_LANG;
+  private readonly detailCode = env.EXTERNAL_API_CODE;
 
   async fetchForYou(page: number): Promise<unknown> {
-    return this.fetch("/dramabox/foryou", { page });
+    // Upstream foryou does not expose stable pagination; keep page in signature for compatibility.
+    return this.fetch("/foryou", { lang: this.defaultLang, page });
   }
 
   async fetchTrending(): Promise<unknown> {
-    return this.fetch("/dramabox/trending");
+    const payload = await this.fetch("/homepage", { page: 1, lang: this.defaultLang });
+    const records =
+      payload &&
+      typeof payload === "object" &&
+      (payload as Record<string, unknown>).recommendList &&
+      typeof (payload as Record<string, unknown>).recommendList === "object"
+        ? ((payload as Record<string, unknown>).recommendList as Record<string, unknown>).records
+        : [];
+    return records;
   }
 
   async fetchLatest(): Promise<unknown> {
-    return this.fetch("/dramabox/latest");
+    return this.fetch("/latest", { lang: this.defaultLang });
   }
 
   async fetchVip(): Promise<unknown> {
-    return this.fetch("/dramabox/vip");
+    const dubbed = await this.fetch("/dubbed", { classify: "terpopuler", page: 1, lang: this.defaultLang });
+    return { items: dubbed };
   }
 
   async fetchDubindo(classify: "terpopuler" | "terbaru"): Promise<unknown> {
-    return this.fetch("/dramabox/dubindo", { classify });
-  }
-
-  async fetchRandomDrama(): Promise<unknown> {
-    return this.fetch("/dramabox/randomdrama");
-  }
-
-  async fetchPopulerSearch(): Promise<unknown> {
-    return this.fetch("/dramabox/populersearch");
+    return this.fetch("/dubbed", { classify, page: 1, lang: this.defaultLang });
   }
 
   async searchDrama(query: string): Promise<unknown> {
-    return this.fetch("/dramabox/search", { query });
+    return this.fetch("/search", { query, lang: this.defaultLang });
   }
 
   async fetchDetail(bookId: string): Promise<unknown> {
-    return this.fetch("/dramabox/detail", { bookId });
+    return this.fetch("/detail", { bookId, lang: this.defaultLang, code: this.detailCode });
   }
 
   async fetchEpisodes(bookId: string): Promise<unknown> {
-    return this.fetch("/dramabox/allepisode", { bookId });
+    return this.fetch("/allepisode", { bookId, lang: this.defaultLang, code: this.detailCode });
   }
 
-  async decryptStream(url: string): Promise<unknown> {
-    return this.fetch("/dramabox/decrypt", { url });
+  async fetchAllEpisodeRaw(bookId: string): Promise<unknown> {
+    return this.fetchEpisodes(bookId);
   }
 
   getDiagnostics(): Record<string, unknown> {

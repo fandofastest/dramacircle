@@ -25,7 +25,7 @@ class PremiumScreen extends ConsumerWidget {
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('DramaCircle Premium', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text('KissAsian Premium', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   SizedBox(height: 10),
                   Text('Unlock all episodes'),
                   Text('No ads (future)'),

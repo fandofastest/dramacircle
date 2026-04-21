@@ -17,7 +17,14 @@ final localStoreProvider = Provider<LocalStore>((ref) {
 });
 
 final dioProvider = Provider<Dio>((ref) {
-  final dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl, connectTimeout: const Duration(seconds: 20)));
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: AppConfig.apiBaseUrl,
+      connectTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 20),
+    ),
+  );
   final store = ref.watch(localStoreProvider);
   dio.interceptors.add(
     InterceptorsWrapper(

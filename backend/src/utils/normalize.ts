@@ -64,7 +64,24 @@ export const extractArrayPayload = (payload: unknown): Record<string, unknown>[]
 
   if (payload && typeof payload === "object") {
     const objectPayload = payload as Record<string, unknown>;
-    const candidates = [objectPayload.data, objectPayload.result, objectPayload.results, objectPayload.items];
+    const recommendList =
+      objectPayload.recommendList && typeof objectPayload.recommendList === "object"
+        ? (objectPayload.recommendList as Record<string, unknown>)
+        : null;
+    const tagCard =
+      objectPayload.tagCardVo && typeof objectPayload.tagCardVo === "object"
+        ? (objectPayload.tagCardVo as Record<string, unknown>)
+        : null;
+    const candidates = [
+      objectPayload.data,
+      objectPayload.result,
+      objectPayload.results,
+      objectPayload.items,
+      objectPayload.records,
+      recommendList?.records,
+      recommendList,
+      tagCard?.tagBooks
+    ];
     for (const candidate of candidates) {
       if (Array.isArray(candidate)) {
         return candidate.filter(

@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() {
   testWidgets('renders app shell', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: DramaCircleApp()));
+    await tester.pumpWidget(const ProviderScope(child: KissAsianApp()));
     await tester.pump();
-    expect(find.byType(DramaCircleApp), findsOneWidget);
+    expect(find.byType(KissAsianApp), findsOneWidget);
   });
 }

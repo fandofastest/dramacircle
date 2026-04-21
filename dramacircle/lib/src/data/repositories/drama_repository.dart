@@ -4,6 +4,7 @@ import 'package:dramacircle/src/data/models/drama_models.dart';
 class DramaRepository {
   DramaRepository(this._dio);
   final Dio _dio;
+  int _forYouPageCursor = 1;
   final Map<String, String> _streamCache = <String, String>{};
   final Map<String, Map<String, dynamic>> _detailCache = <String, Map<String, dynamic>>{};
   final Map<String, List<EpisodeItem>> _episodesCache = <String, List<EpisodeItem>>{};
@@ -20,6 +21,20 @@ class DramaRepository {
   Future<List<DramaItem>> latest() async {
     final response = await _dio.get('/drama/latest');
     final list = (response.data['data'] as List<dynamic>? ?? <dynamic>[]);
+    return list.map((e) => DramaItem.fromJson((e ?? <String, dynamic>{}) as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<DramaItem>> forYou({int page = 1}) async {
+    final response = await _dio.get('/drama/foryou', queryParameters: {'page': page});
+    final payload = (response.data['data'] ?? <String, dynamic>{}) as Map<String, dynamic>;
+    final list = (payload['items'] as List<dynamic>? ?? <dynamic>[]);
+    return list.map((e) => DramaItem.fromJson((e ?? <String, dynamic>{}) as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<DramaItem>> dubindo({String classify = 'terpopuler'}) async {
+    final response = await _dio.get('/drama/dubindo', queryParameters: {'classify': classify});
+    final payload = (response.data['data'] ?? <String, dynamic>{}) as Map<String, dynamic>;
+    final list = (payload['items'] as List<dynamic>? ?? <dynamic>[]);
     return list.map((e) => DramaItem.fromJson((e ?? <String, dynamic>{}) as Map<String, dynamic>)).toList();
   }
 
@@ -65,18 +80,21 @@ class DramaRepository {
     }
 
     final task = () async {
-      final response = await _dio.get('/drama/episodes/$bookId');
+      final response = await _dio.get('/drama/allepisode/$bookId');
       final payload = (response.data['data'] ?? <String, dynamic>{}) as Map<String, dynamic>;
-      final list = (payload['episodes'] as List<dynamic>? ?? <dynamic>[]);
+      final list = (payload['items'] as List<dynamic>? ?? <dynamic>[]);
       final mapped = list
           .map((item) {
             final map = (item ?? <String, dynamic>{}) as Map<String, dynamic>;
+            final chapterIndexRaw = map['chapterIndex'] ?? map['episodeNumber'] ?? 1;
+            final chapterIndex =
+                (chapterIndexRaw is num) ? chapterIndexRaw.toInt() : int.tryParse(chapterIndexRaw.toString()) ?? 1;
             return EpisodeItem(
-              episodeId: (map['episodeNumber'] ?? '').toString(),
+              episodeId: (map['chapterId'] ?? map['episodeId'] ?? chapterIndex).toString(),
               bookId: (map['bookId'] ?? bookId).toString(),
-              episodeNumber: (map['episodeNumber'] is num) ? (map['episodeNumber'] as num).toInt() : 1,
-              videoUrl: (map['encryptedUrl'] ?? map['videoUrl'] ?? '').toString(),
-              isPremium: (map['isPremium'] == true || map['vip'] == true || map['isVip'] == true),
+              episodeNumber: chapterIndex,
+              videoUrl: (map['videoUrl'] ?? map['encryptedUrl'] ?? '').toString(),
+              isPremium: (map['isCharge'] == true || map['isPremium'] == true || map['vip'] == true || map['isVip'] == true),
               title: '',
               description: '',
             );
@@ -173,58 +191,91 @@ class DramaRepository {
   }
 
   Future<List<EpisodeItem>> randomDrama() async {
-    final response = await _dio.get('/drama/randomdrama');
-    final raw = response.data['data'];
-    final list = _extractRandomList(raw);
-    final episodes = list
-        .map((item) => EpisodeItem.fromRandomJson((item ?? <String, dynamic>{}) as Map<String, dynamic>))
-        .where((item) => item.episodeId.isNotEmpty || item.bookId.isNotEmpty)
-        .toList();
-
+    const targetMinItems = 6;
     final resolved = <EpisodeItem>[];
-    for (final item in episodes) {
-      var candidate = item;
-      if (candidate.videoUrl.isEmpty && candidate.bookId.isNotEmpty) {
-        final eps = await episodesByBook(candidate.bookId, fallbackTitle: candidate.title, fallbackDescription: candidate.description);
-        if (eps.isNotEmpty) {
-          candidate = eps.first;
+    final seenEpisodeKeys = <String>{};
+    final triedBookIds = <String>{};
+
+    Future<void> appendFromDramaList(List<DramaItem> dramas) async {
+      for (final drama in dramas) {
+        if (resolved.length >= targetMinItems) {
+          return;
         }
+        if (drama.bookId.isEmpty || triedBookIds.contains(drama.bookId)) {
+          continue;
+        }
+        triedBookIds.add(drama.bookId);
+        List<EpisodeItem> eps = <EpisodeItem>[];
+        try {
+          eps = await episodesByBook(
+            drama.bookId,
+            fallbackTitle: drama.title,
+            fallbackDescription: drama.description ?? '',
+          );
+        } catch (_) {
+          continue;
+        }
+        if (eps.isEmpty) {
+          continue;
+        }
+        final firstPlayable = eps.firstWhere((episode) => episode.videoUrl.isNotEmpty, orElse: () => eps.first);
+        if (firstPlayable.videoUrl.isEmpty) {
+          continue;
+        }
+        final key = firstPlayable.episodeId.isNotEmpty
+            ? firstPlayable.episodeId
+            : '${firstPlayable.bookId}-${firstPlayable.episodeNumber}';
+        if (key.isEmpty || seenEpisodeKeys.contains(key)) {
+          continue;
+        }
+        var stream = firstPlayable.videoUrl;
+        if (stream.contains('.encrypt.')) {
+          try {
+            stream = await decryptStream(stream);
+          } catch (_) {
+            continue;
+          }
+        }
+        if (stream.isEmpty) {
+          continue;
+        }
+        seenEpisodeKeys.add(key);
+        resolved.add(firstPlayable.copyWith(videoUrl: stream));
       }
-      if (candidate.videoUrl.isEmpty) {
-        continue;
-      }
-      final stream = await decryptStream(candidate.videoUrl);
-      resolved.add(candidate.copyWith(videoUrl: stream));
-    }
-    if (resolved.isNotEmpty) {
-      return resolved;
     }
 
-    final fallbackDramas = await latest();
-    final fallback = <EpisodeItem>[];
-    for (final drama in fallbackDramas.take(8)) {
-      final eps = await episodesByBook(drama.bookId, fallbackTitle: drama.title, fallbackDescription: drama.description ?? '');
-      if (eps.isEmpty) {
-        continue;
+    for (var i = 0; i < 4 && resolved.length < targetMinItems; i++) {
+      List<DramaItem> forYouPage = <DramaItem>[];
+      try {
+        forYouPage = await _fetchForYouPage(_forYouPageCursor);
+      } catch (_) {
+        forYouPage = <DramaItem>[];
       }
-      final first = eps.first;
-      final stream = await decryptStream(first.videoUrl);
-      fallback.add(first.copyWith(videoUrl: stream));
+      _forYouPageCursor += 1;
+      if (_forYouPageCursor > 50) {
+        _forYouPageCursor = 1;
+      }
+      if (forYouPage.isEmpty) {
+        break;
+      }
+      await appendFromDramaList(forYouPage);
     }
-    return fallback;
+
+    if (resolved.length < targetMinItems) {
+      try {
+        final fallbackDramas = await latest();
+        await appendFromDramaList(fallbackDramas);
+      } catch (_) {}
+    }
+
+    return resolved;
   }
 
-  List<dynamic> _extractRandomList(dynamic raw) {
-    if (raw is List) {
-      return raw;
-    }
-    if (raw is Map<String, dynamic>) {
-      final direct = raw['items'] ?? raw['results'] ?? raw['episodes'] ?? raw['data'];
-      if (direct is List) {
-        return direct;
-      }
-    }
-    return <dynamic>[];
+  Future<List<DramaItem>> _fetchForYouPage(int page) async {
+    final response = await _dio.get('/drama/foryou', queryParameters: {'page': page});
+    final payload = (response.data['data'] ?? <String, dynamic>{}) as Map<String, dynamic>;
+    final list = (payload['items'] as List<dynamic>? ?? <dynamic>[]);
+    return list.map((e) => DramaItem.fromJson((e ?? <String, dynamic>{}) as Map<String, dynamic>)).toList();
   }
 
   Future<List<EpisodeItem>> episodesByBook(
@@ -241,7 +292,7 @@ class DramaRepository {
           bookId: episode.bookId,
           episodeNumber: episode.episodeNumber,
           videoUrl: episode.videoUrl,
-          isPremium: episode.isPremium || episode.episodeNumber > 3,
+          isPremium: episode.isPremium,
           title: fallbackTitle,
           description: fallbackDescription,
           cover: null,

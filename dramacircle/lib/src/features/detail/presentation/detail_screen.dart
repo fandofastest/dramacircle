@@ -1,9 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dramacircle/src/core/providers.dart';
 import 'package:dramacircle/src/data/models/drama_models.dart';
-import 'package:dramacircle/src/features/auth/presentation/login_screen.dart';
 import 'package:dramacircle/src/features/auth/providers/auth_controller.dart';
-import 'package:dramacircle/src/features/auth/providers/guest_access_controller.dart';
 import 'package:dramacircle/src/features/fyp/providers/fyp_controller.dart';
 import 'package:dramacircle/src/features/player/presentation/player_screen.dart';
 import 'package:dramacircle/src/features/premium/presentation/premium_screen.dart';
@@ -61,7 +59,6 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authControllerProvider).valueOrNull;
-    final guestAccess = ref.watch(guestAccessProvider);
     final store = ref.watch(localStoreProvider);
     final watchedSet = store.history.toSet();
     if (_loading) {
@@ -103,14 +100,13 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
             itemBuilder: (context, index) {
               final episode = _episodes[index];
               final premiumLocked = episode.isPremium && !(user?.isPremium ?? false);
-              final guestLocked = user == null && guestAccess.used && guestAccess.unlockedEpisodeId != episode.episodeId;
-              final locked = premiumLocked || guestLocked;
+              final locked = premiumLocked;
               final watched = watchedSet.contains(episode.episodeId);
               return InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: locked
                     ? () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => guestLocked ? const LoginScreen() : const PremiumScreen()),
+                          MaterialPageRoute(builder: (_) => const PremiumScreen()),
                         )
                     : () {
                         Navigator.of(context).push(

@@ -6,8 +6,8 @@ import 'package:dramacircle/src/features/splash/presentation/splash_screen.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DramaCircleApp extends ConsumerWidget {
-  const DramaCircleApp({super.key});
+class KissAsianApp extends ConsumerWidget {
+  const KissAsianApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +22,7 @@ class DramaCircleApp extends ConsumerWidget {
     }
 
     return MaterialApp(
-      title: 'DramaCircle',
+      title: 'KissAsian',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       home: home,

@@ -1,5 +1,5 @@
 import 'package:dramacircle/src/features/discover/presentation/discover_screen.dart';
-import 'package:dramacircle/src/features/fyp/presentation/fyp_home_screen.dart';
+import 'package:dramacircle/src/features/home/presentation/home_catalog_screen.dart';
 import 'package:dramacircle/src/features/premium/presentation/premium_screen.dart';
 import 'package:dramacircle/src/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +15,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   int _index = 0;
 
   final _pages = const [
-    FypHomeScreen(),
+    HomeCatalogScreen(),
     DiscoverScreen(),
     PremiumScreen(),
     ProfileScreen(),

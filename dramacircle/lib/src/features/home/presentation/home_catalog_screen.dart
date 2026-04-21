@@ -1,22 +1,21 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dramacircle/src/core/providers.dart';
 import 'package:dramacircle/src/data/models/drama_models.dart';
 import 'package:dramacircle/src/features/detail/presentation/detail_screen.dart';
 import 'package:dramacircle/src/features/fyp/providers/fyp_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DiscoverScreen extends ConsumerStatefulWidget {
-  const DiscoverScreen({super.key});
+class HomeCatalogScreen extends ConsumerStatefulWidget {
+  const HomeCatalogScreen({super.key});
 
   @override
-  ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
+  ConsumerState<HomeCatalogScreen> createState() => _HomeCatalogScreenState();
 }
 
-class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
-  final _searchController = TextEditingController();
-  List<DramaItem> _trending = <DramaItem>[];
+class _HomeCatalogScreenState extends ConsumerState<HomeCatalogScreen> {
+  List<DramaItem> _forYou = <DramaItem>[];
   List<DramaItem> _latest = <DramaItem>[];
-  List<DramaItem> _search = <DramaItem>[];
   bool _loading = true;
 
   @override
@@ -25,33 +24,23 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+    });
     final repo = ref.read(dramaRepositoryProvider);
-    final data = await Future.wait([repo.trending(), repo.latest()]);
-    if (mounted) {
-      setState(() {
-        _trending = data[0];
-        _latest = data[1];
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _searchDrama(String query) async {
-    if (query.isEmpty) {
-      setState(() => _search = <DramaItem>[]);
+    final data = await Future.wait([
+      repo.forYou(page: 1),
+      repo.latest(),
+    ]);
+    if (!mounted) {
       return;
     }
-    final data = await ref.read(dramaRepositoryProvider).search(query);
-    if (mounted) {
-      setState(() => _search = data);
-    }
+    setState(() {
+      _forYou = data[0];
+      _latest = data[1];
+      _loading = false;
+    });
   }
 
   @override
@@ -59,15 +48,40 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    final continueWatchingMap = ref.read(localStoreProvider).continueWatching;
+    final continueIds = continueWatchingMap.keys.map((key) => key.toString()).toSet();
+    final continueWatchingItems = <DramaItem>[
+      ..._forYou.where((item) => continueIds.contains(item.bookId)),
+      ..._latest.where((item) => continueIds.contains(item.bookId)),
+    ];
+    final uniqueContinueWatching = _uniqueByBookId(continueWatchingItems);
+
     return SafeArea(
       child: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Home',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _searchDrama,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search drama'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Ringkasan cepat buat lanjut nonton.',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+              ),
             ),
           ),
           Expanded(
@@ -76,19 +90,19 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (_search.isNotEmpty) ...[
-                    const _SectionTitle('Search'),
+                  if (uniqueContinueWatching.isNotEmpty) ...[
+                    const _SectionTitle('Lanjut Nonton'),
                     const SizedBox(height: 10),
-                    _DramaGrid(items: _search),
+                    _DramaHorizontal(items: uniqueContinueWatching.take(8).toList()),
                     const SizedBox(height: 20),
                   ],
-                  const _SectionTitle('Trending'),
+                  const _SectionTitle('Untuk Kamu'),
                   const SizedBox(height: 10),
-                  _DramaHorizontal(items: _trending),
+                  _DramaHorizontal(items: _forYou.take(8).toList()),
                   const SizedBox(height: 20),
-                  const _SectionTitle('Latest'),
+                  const _SectionTitle('Terbaru'),
                   const SizedBox(height: 10),
-                  _DramaGrid(items: _latest),
+                  _DramaGrid(items: _latest.take(8).toList()),
                 ],
               ),
             ),
@@ -96,6 +110,19 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         ],
       ),
     );
+  }
+
+  List<DramaItem> _uniqueByBookId(List<DramaItem> items) {
+    final seen = <String>{};
+    final output = <DramaItem>[];
+    for (final item in items) {
+      if (item.bookId.isEmpty || seen.contains(item.bookId)) {
+        continue;
+      }
+      seen.add(item.bookId);
+      output.add(item);
+    }
+    return output;
   }
 }
 
@@ -122,8 +149,7 @@ class _DramaHorizontal extends StatelessWidget {
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          final item = items[index];
-          return _DramaCard(item: item, width: 160);
+          return _DramaCard(item: items[index], width: 160);
         },
       ),
     );
@@ -146,9 +172,7 @@ class _DramaGrid extends StatelessWidget {
         mainAxisSpacing: 10,
         childAspectRatio: 0.76,
       ),
-      itemBuilder: (context, index) {
-        return _DramaCard(item: items[index]);
-      },
+      itemBuilder: (context, index) => _DramaCard(item: items[index]),
     );
   }
 }
@@ -161,9 +185,7 @@ class _DramaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => DetailScreen(bookId: item.bookId)));
-      },
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DetailScreen(bookId: item.bookId))),
       child: SizedBox(
         width: width,
         child: Column(

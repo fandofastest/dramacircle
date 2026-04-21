@@ -34,6 +34,7 @@ router.get("/populersearch", asyncHandler(controller.getPopulerSearch));
 router.get("/search", validate(searchQuerySchema, "query"), asyncHandler(controller.search));
 router.get("/detail/:bookId", validate(detailParamsSchema, "params"), asyncHandler(controller.getDetail));
 router.get("/episodes/:bookId", validate(episodesParamsSchema, "params"), asyncHandler(controller.getEpisodes));
+router.get("/allepisode/:bookId", validate(episodesParamsSchema, "params"), asyncHandler(controller.getAllEpisodeRaw));
 router.get("/stream", validate(streamQuerySchema, "query"), asyncHandler(controller.stream));
 router.get("/upstream-diagnostics", asyncHandler(controller.getUpstreamDiagnostics));
 router.get(

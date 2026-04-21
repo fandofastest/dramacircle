@@ -1,8 +1,6 @@
 import 'package:dramacircle/src/core/providers.dart';
 import 'package:dramacircle/src/data/models/drama_models.dart';
-import 'package:dramacircle/src/features/auth/presentation/login_screen.dart';
 import 'package:dramacircle/src/features/auth/providers/auth_controller.dart';
-import 'package:dramacircle/src/features/auth/providers/guest_access_controller.dart';
 import 'package:dramacircle/src/features/fyp/presentation/fyp_video_page.dart';
 import 'package:dramacircle/src/features/fyp/providers/fyp_controller.dart';
 import 'package:dramacircle/src/features/premium/presentation/premium_screen.dart';
@@ -81,7 +79,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authControllerProvider).valueOrNull;
-    final guestAccess = ref.watch(guestAccessProvider);
     return Scaffold(
       body: PageView.builder(
         controller: _pageController,
@@ -98,7 +95,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           final episode = _episodes[index];
           final store = ref.read(localStoreProvider);
           final premiumLocked = episode.isPremium && !(user?.isPremium ?? false);
-          final guestLocked = user == null && guestAccess.used && guestAccess.unlockedEpisodeId != episode.episodeId;
           final unresolved = _needsDecrypt(episode.videoUrl);
           if (unresolved) {
             _resolveForIndex(index);
@@ -106,17 +102,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return FypVideoPage(
             episode: unresolved ? episode.copyWith(videoUrl: '') : episode,
             userPremium: user?.isPremium ?? false,
-            isLocked: premiumLocked || guestLocked,
-            lockTitle: guestLocked ? 'Login untuk lanjut nonton 🔐' : 'Unlock this episode 🔒',
-            lockButtonText: guestLocked ? 'Login' : 'Go Premium',
-            onGoPremium: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => guestLocked ? const LoginScreen() : const PremiumScreen()),
-            ),
-            onPlaybackStarted: () {
-              if (user == null && !guestAccess.used) {
-                ref.read(guestAccessProvider.notifier).consumeIfNeeded(episode.episodeId);
-              }
-            },
+            isLocked: premiumLocked,
+            lockTitle: 'Unlock this episode 🔒',
+            lockButtonText: 'Go Premium',
+            onGoPremium: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumScreen())),
+            onPlaybackStarted: () {},
             onSaveProgress: (positionMs) async {
               await store.pushHistory(episode.episodeId);
               await store.setEpisodePositionMs(episodeId: episode.episodeId, positionMs: positionMs);
@@ -133,7 +123,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEpisodePicker(user: user, guestAccess: guestAccess),
+        onPressed: () => _openEpisodePicker(user: user),
         icon: const Icon(Icons.grid_view_rounded),
         label: const Text('Episodes'),
       ),
@@ -142,7 +132,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _openEpisodePicker({
     required UserProfile? user,
-    required GuestAccessState guestAccess,
   }) async {
     final picked = await showModalBottomSheet<int>(
       context: context,
@@ -170,8 +159,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     itemBuilder: (context, index) {
                       final episode = _episodes[index];
                       final premiumLocked = episode.isPremium && !(user?.isPremium ?? false);
-                      final guestLocked = user == null && guestAccess.used && guestAccess.unlockedEpisodeId != episode.episodeId;
-                      final locked = premiumLocked || guestLocked;
+                      final locked = premiumLocked;
                       final active = index == _currentIndex;
                       return InkWell(
                         borderRadius: BorderRadius.circular(10),

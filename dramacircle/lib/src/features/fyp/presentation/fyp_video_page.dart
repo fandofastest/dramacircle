@@ -50,7 +50,6 @@ class _FypVideoPageState extends ConsumerState<FypVideoPage> {
   bool _isVisible = false;
   bool _isInitializing = false;
   bool _hasLoadError = false;
-  bool _isTabletLayout = false;
   bool _showDetailActions = true;
   bool _isDisposed = false;
   bool _playTracked = false;
@@ -113,9 +112,10 @@ class _FypVideoPageState extends ConsumerState<FypVideoPage> {
     final config = BetterPlayerConfiguration(
       autoPlay: !widget.isLocked,
       looping: true,
-      fit: BoxFit.cover,
-      expandToFill: true,
-      aspectRatio: _isTabletLayout ? (9 / 16) : null,
+      // Keep full frame visible in portrait feed; avoid top/bottom crop.
+      fit: BoxFit.contain,
+      expandToFill: false,
+      aspectRatio: 9 / 16,
       controlsConfiguration: BetterPlayerControlsConfiguration(showControls: widget.showSeekBar),
       placeholder: const Center(child: CircularProgressIndicator()),
     );
@@ -229,6 +229,9 @@ class _FypVideoPageState extends ConsumerState<FypVideoPage> {
   }
 
   bool _canAutoPlay() {
+    if (!mounted || _isDisposed) {
+      return false;
+    }
     final routeCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     return _isVisible && routeCurrent && !_pausedByUser && !widget.isLocked;
   }
@@ -579,7 +582,6 @@ class _FypVideoPageState extends ConsumerState<FypVideoPage> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final isTablet = mediaQuery.size.shortestSide >= 600;
-    _isTabletLayout = isTablet;
     final showRightActions = !widget.showSeekBar || _showDetailActions;
     final showBottomInfo = !widget.showSeekBar;
     final showGradient = !widget.showSeekBar;
@@ -718,6 +720,9 @@ class _FypVideoPageState extends ConsumerState<FypVideoPage> {
     return VisibilityDetector(
       key: ValueKey<String>(widget.episode.episodeId),
       onVisibilityChanged: (info) {
+        if (!mounted || _isDisposed) {
+          return;
+        }
         _isVisible = info.visibleFraction > 0.6;
         if (widget.isLocked) return;
         if (_canAutoPlay()) {
